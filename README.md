@@ -37,11 +37,21 @@ git clone https://github.com/TanGentleman/signals.git && cd signals
 ## Prerequisites
 
 - macOS
-- Docker Desktop (running)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — install and open it before running setup
 - `cloudflared` — `brew install cloudflared`
 - Node.js / npm — `brew install node`
-- A Cloudflare account with a domain (free tier is fine)
 - Signal installed on your phone
+- A Cloudflare account with a domain — see below
+
+### Getting a Cloudflare domain
+
+You need a domain whose DNS is managed by Cloudflare (free account is fine).
+
+**Option A — buy a domain through Cloudflare** (easiest): go to [dash.cloudflare.com](https://dash.cloudflare.com) → Registrar → Register a domain. It lands in your account ready to use.
+
+**Option B — use a domain you already own**: in the Cloudflare dashboard, add the domain as a new site, then update its nameservers at your registrar to the ones Cloudflare gives you. Takes ~5 minutes to propagate.
+
+Either way, once your domain is active in Cloudflare, you're ready to run `signals init`.
 
 ## CLI
 

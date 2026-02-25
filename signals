@@ -228,6 +228,10 @@ docker_exists() {
 }
 
 ensure_docker() {
+  if ! docker info >/dev/null 2>&1; then
+    die "Docker daemon is not running. Open Docker Desktop and wait for it to start, then retry."
+  fi
+
   if docker_running; then
     log "Docker: ${CONTAINER_NAME} already running"
   elif docker_exists; then
@@ -505,9 +509,10 @@ cmd_setup() {
   log ""
 
   log "--- Link Signal Device ---"
-  log "Open: ${LOCAL_API}/v1/qrcodelink?device_name=mac"
-  log "Then in Signal: Settings > Linked Devices > scan QR"
-  read -rp "Press Enter once linked (or skip if already done)..."
+  local qr_url="${LOCAL_API}/v1/qrcodelink?device_name=mac"
+  open "$qr_url" 2>/dev/null || log "Open in your browser: $qr_url"
+  log "In Signal: Settings > Linked Devices > scan the QR code"
+  read -rp "Press Enter once linked (or skip if already linked)..."
   log ""
 
   log "--- Cloudflare Tunnel ---"

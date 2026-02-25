@@ -6,7 +6,7 @@ BIN_DIR="${HOME}/.local/bin"
 BIN_PATH="${BIN_DIR}/signals"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 LOCAL_SIGNALS="${SCRIPT_DIR}/signals"
-REPO_URL="${SIGNALS_REPO_URL:-}"
+REPO_URL="${SIGNALS_REPO_URL:-https://github.com/TanGentleman/signals.git}"
 
 log() {
   printf '%s\n' "$*"
