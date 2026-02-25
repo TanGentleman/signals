@@ -17,10 +17,21 @@ Any service that can make an HTTP POST — AI agents, cron jobs, webhooks — ca
 ## Quick start
 
 ```bash
+curl -LsSf https://my-url/install.sh | bash
+```
+
+The installer:
+- installs to `~/.signals`
+- creates a `signals` launcher in `~/.local/bin`
+- runs `signals init` so you can paste your domain + phone numbers
+- optionally runs `signals setup`
+
+Manual fallback:
+
+```bash
 git clone https://github.com/yourusername/signals.git && cd signals
-cp .env.example .env     # fill in your domain + phone numbers
-cp wrangler.toml.example wrangler.toml  # fill in your route + zone
-./signals setup          # interactive, ~5 min
+./signals init
+./signals setup
 ```
 
 ## Prerequisites
@@ -35,6 +46,14 @@ cp wrangler.toml.example wrangler.toml  # fill in your route + zone
 ## CLI
 
 ```bash
+signals init                # generate local .env + wrangler.toml
+signals setup               # first-time: docker, tunnel, worker, e2e test
+signals up                  # start tunnel + docker
+signals up <token>          # start + redeploy worker with new token
+signals down                # stop tunnel
+signals uninstall           # remove tunnel, worker, docker container
+
+# or, from inside the repo:
 ./signals setup             # first-time: docker, tunnel, worker, e2e test
 ./signals up                # start tunnel + docker
 ./signals up <token>        # start + redeploy worker with new token
@@ -82,6 +101,7 @@ await fetch("https://signal-agent.yourdomain.com/notify", {
 
 | File | Purpose |
 |---|---|
+| `install.sh` | Installer for `curl ... | bash` flow |
 | `signals` | CLI — setup, up, down, uninstall |
 | `src/index.ts` | Cloudflare Worker — auth + relay to signal-cli-rest-api |
 | `wrangler.toml.example` | Worker config template (copy to local `wrangler.toml`) |
