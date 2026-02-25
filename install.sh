@@ -78,7 +78,7 @@ log ""
 log "Let's configure your local files (.env and wrangler.toml)."
 "$TARGET_SIGNALS" init
 
-if confirm "Run full setup now?"; then
+if [ -n "${DOMAIN:-}" ] || confirm "Run full setup now?"; then
   "$TARGET_SIGNALS" setup
 else
   log ""

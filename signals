@@ -448,6 +448,21 @@ cmd_init() {
   local existing_domain="" existing_account="" existing_recipient=""
   local domain account recipient
 
+  # Non-interactive mode: all three config values supplied via environment
+  if [[ -n "${DOMAIN:-}" && -n "${SIGNAL_ACCOUNT:-}" && -n "${SIGNAL_RECIPIENT:-}" ]]; then
+    valid_domain "$DOMAIN"       || die "DOMAIN is not a valid domain: $DOMAIN"
+    valid_e164 "$SIGNAL_ACCOUNT" || die "SIGNAL_ACCOUNT is not a valid E.164 number: $SIGNAL_ACCOUNT"
+    valid_e164 "$SIGNAL_RECIPIENT" || die "SIGNAL_RECIPIENT is not a valid E.164 number: $SIGNAL_RECIPIENT"
+    write_env_file "$DOMAIN" "$SIGNAL_ACCOUNT" "$SIGNAL_RECIPIENT"
+    log "Wrote $ENV_FILE"
+    write_wrangler_file "$DOMAIN"
+    log "Wrote $PROJECT_DIR/$WRANGLER_CONFIG"
+    log ""
+    log "Config complete."
+    log "Next: ./signals setup"
+    return
+  fi
+
   if [[ -f "$ENV_FILE" ]]; then
     # shellcheck disable=SC1090
     source "$ENV_FILE" || true

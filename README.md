@@ -17,14 +17,19 @@ Any service that can make an HTTP POST — AI agents, cron jobs, webhooks — ca
 ## Quick start
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/TanGentleman/signals/main/install.sh | bash
+DOMAIN=yourdomain.com \
+SIGNAL_ACCOUNT=+1XXXXXXXXXX \
+SIGNAL_RECIPIENT=+1XXXXXXXXXX \
+  curl -LsSf https://raw.githubusercontent.com/TanGentleman/signals/main/install.sh | bash
 ```
+
+Fill in your values and paste. The installer will clone the repo, write your config, and kick off setup — stopping only to ask you to scan the Signal QR code.
 
 The installer:
 - installs to `~/.signals`
 - creates a `signals` launcher in `~/.local/bin`
-- runs `signals init` so you can paste your domain + phone numbers
-- optionally runs `signals setup`
+- writes `.env` and `wrangler.toml` from your env vars (or prompts if not set)
+- runs `signals setup`
 
 Manual fallback:
 
