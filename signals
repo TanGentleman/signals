@@ -16,9 +16,9 @@ readonly CF_CONFIG="$CF_DIR/config.yml"
 readonly PIDFILE="/tmp/${APP_NAME}-${TUNNEL_NAME}.pid"
 readonly UUID_REGEX='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 
-DOMAIN=""
-SIGNAL_ACCOUNT=""
-SIGNAL_RECIPIENT=""
+DOMAIN="${DOMAIN:-}"
+SIGNAL_ACCOUNT="${SIGNAL_ACCOUNT:-}"
+SIGNAL_RECIPIENT="${SIGNAL_RECIPIENT:-}"
 TUNNEL_HOST=""
 WORKER_URL=""
 TUNNEL_ID=""
