@@ -1,0 +1,13 @@
+name = "signal-agent"
+main = "src/index.ts"
+compatibility_date = "2026-02-25"
+
+# Replace with your own zone/hostname before deploy.
+routes = [{ pattern = "signal-agent.yourdomain.com/*", zone_name = "yourdomain.com" }]
+workers_dev = false
+
+# Secrets — set via CLI (never commit these):
+#   npx wrangler secret put SIGNAL_CLI_URL        # https://signal-bridge.yourdomain.com
+#   npx wrangler secret put SIGNAL_ACCOUNT        # +1xxx E.164 format
+#   npx wrangler secret put SIGNAL_RECIPIENT      # +1xxx E.164 format
+#   npx wrangler secret put SIGNAL_WEBHOOK_TOKEN  # openssl rand -hex 32

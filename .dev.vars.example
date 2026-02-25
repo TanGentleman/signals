@@ -1,0 +1,7 @@
+# Local dev secrets for `npx wrangler dev`
+# Copy to .dev.vars and fill in your values (never commit .dev.vars)
+
+SIGNAL_CLI_URL=http://localhost:8080
+SIGNAL_ACCOUNT=+1XXXXXXXXXX
+SIGNAL_RECIPIENT=+1XXXXXXXXXX
+SIGNAL_WEBHOOK_TOKEN=your-secret-token-here

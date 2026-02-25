@@ -1,0 +1,438 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly APP_NAME="signals"
+readonly CONTAINER_NAME="signal-bridge"
+readonly TUNNEL_NAME="signal-bridge"
+readonly WORKER_NAME="signal-agent"
+readonly WRANGLER_CONFIG="wrangler.toml"
+readonly WRANGLER_CONFIG_EXAMPLE="wrangler.toml.example"
+readonly LOCAL_API="http://localhost:8080"
+readonly CF_DIR="$HOME/.cloudflared"
+readonly CF_CONFIG="$CF_DIR/config.yml"
+readonly PIDFILE="/tmp/${APP_NAME}-${TUNNEL_NAME}.pid"
+readonly UUID_REGEX='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+DOMAIN=""
+SIGNAL_ACCOUNT=""
+SIGNAL_RECIPIENT=""
+TUNNEL_HOST=""
+WORKER_URL=""
+TUNNEL_ID=""
+DEPLOY_TOKEN=""
+
+log() {
+  printf '%s\n' "$*"
+}
+
+die() {
+  log "ERROR: $*"
+  exit 1
+}
+
+mask() {
+  local value="${1:-}"
+  if [[ ${#value} -le 6 ]]; then
+    printf '%s' "$value"
+  else
+    printf '%s' "${value:0:4}...${value: -2}"
+  fi
+}
+
+extract_uuid() {
+  grep -oE "$UUID_REGEX" | head -1
+}
+
+decode_b64_to_file() {
+  local data="$1"
+  local file="$2"
+  printf '%s' "$data" | base64 --decode >"$file" 2>/dev/null && return 0
+  printf '%s' "$data" | base64 -D >"$file" 2>/dev/null && return 0
+  return 1
+}
+
+wait_for_url() {
+  local url="$1"
+  local max_seconds="$2"
+  local i
+  for i in $(seq 1 "$max_seconds"); do
+    if curl -sf "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+require_cmd() {
+  local missing=()
+  local cmd
+  for cmd in "$@"; do
+    command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    log "Missing required commands:"
+    printf '  - %s\n' "${missing[@]}"
+    die "Install the missing dependencies and retry."
+  fi
+}
+
+require_env() {
+  local var_name="$1"
+  local value="${!var_name:-}"
+  if [[ -z "$value" || "$value" == *"yourdomain"* || "$value" == *"XXXXXXXXXX"* ]]; then
+    die "$var_name is not set correctly in .env"
+  fi
+}
+
+load_env() {
+  [[ -f .env ]] || die "No .env found. Run: cp .env.example .env"
+  # shellcheck disable=SC1091
+  source .env
+  require_env DOMAIN
+  require_env SIGNAL_ACCOUNT
+  require_env SIGNAL_RECIPIENT
+
+  TUNNEL_HOST="${TUNNEL_NAME}.${DOMAIN}"
+  WORKER_URL="https://${WORKER_NAME}.${DOMAIN}/notify"
+}
+
+check_prereqs() {
+  require_cmd docker cloudflared node npm npx curl openssl base64 grep head
+}
+
+ensure_wrangler_config() {
+  if [[ -f "$WRANGLER_CONFIG" ]]; then
+    return
+  fi
+  if [[ -f "$WRANGLER_CONFIG_EXAMPLE" ]]; then
+    die "Missing $WRANGLER_CONFIG. Run: cp $WRANGLER_CONFIG_EXAMPLE $WRANGLER_CONFIG (then set your route)."
+  fi
+  die "Missing $WRANGLER_CONFIG and $WRANGLER_CONFIG_EXAMPLE."
+}
+
+docker_running() {
+  docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}\$"
+}
+
+docker_exists() {
+  docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}\$"
+}
+
+ensure_docker() {
+  if docker_running; then
+    log "Docker: ${CONTAINER_NAME} already running"
+  elif docker_exists; then
+    log "Starting ${CONTAINER_NAME} container..."
+    docker start "$CONTAINER_NAME" >/dev/null
+    log "Docker: ${CONTAINER_NAME} started"
+  else
+    log "Creating ${CONTAINER_NAME} container..."
+    docker run -d --name "$CONTAINER_NAME" \
+      --restart unless-stopped \
+      -p 8080:8080 \
+      -v "$HOME/.local/share/signal-cli:/home/.local/share/signal-cli" \
+      -e MODE=native \
+      bbernhard/signal-cli-rest-api >/dev/null
+    log "Docker: ${CONTAINER_NAME} created"
+  fi
+
+  wait_for_url "${LOCAL_API}/v1/about" 10 || die "signal-cli-rest-api not reachable after 10s"
+  log "signal-cli-rest-api reachable"
+}
+
+tunnel_running() {
+  [[ -f "$PIDFILE" ]] || return 1
+  local pid
+  pid="$(<"$PIDFILE")"
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+write_cloudflared_config() {
+  mkdir -p "$CF_DIR"
+  cat >"$CF_CONFIG" <<EOF
+tunnel: $TUNNEL_ID
+credentials-file: $CF_DIR/$TUNNEL_ID.json
+
+ingress:
+  - hostname: $TUNNEL_HOST
+    service: http://localhost:8080
+  - service: http_status:404
+EOF
+  log "Wrote $CF_CONFIG"
+}
+
+ensure_tunnel() {
+  local info_out token
+
+  if cloudflared tunnel info "$TUNNEL_NAME" >/dev/null 2>&1; then
+    log "Tunnel '${TUNNEL_NAME}' already exists"
+    info_out="$(cloudflared tunnel info "$TUNNEL_NAME" 2>&1 || true)"
+    TUNNEL_ID="$(printf '%s' "$info_out" | extract_uuid)"
+    [[ -n "$TUNNEL_ID" ]] || die "Could not determine tunnel ID for ${TUNNEL_NAME}"
+
+    if [[ ! -f "$CF_DIR/$TUNNEL_ID.json" ]]; then
+      log "Tunnel credentials missing locally. Re-authenticating..."
+      cloudflared tunnel login
+      token="$(cloudflared tunnel token "$TUNNEL_NAME" 2>/dev/null || true)"
+      if [[ -z "$token" ]]; then
+        die "Could not fetch tunnel token. Copy $CF_DIR/$TUNNEL_ID.json from original machine."
+      fi
+      decode_b64_to_file "$token" "$CF_DIR/$TUNNEL_ID.json" || die "Could not decode tunnel credentials."
+      log "Tunnel credentials saved to $CF_DIR/$TUNNEL_ID.json"
+    fi
+    return
+  fi
+
+  [[ -f "$CF_DIR/cert.pem" ]] || {
+    log "Logging into Cloudflare (browser opens)..."
+    cloudflared tunnel login
+  }
+
+  log "Creating tunnel '${TUNNEL_NAME}'..."
+  info_out="$(cloudflared tunnel create "$TUNNEL_NAME" 2>&1 || true)"
+  TUNNEL_ID="$(printf '%s' "$info_out" | extract_uuid)"
+  [[ -n "$TUNNEL_ID" ]] || die "Tunnel creation failed. Output: $info_out"
+
+  log "Routing DNS for ${TUNNEL_HOST}..."
+  cloudflared tunnel route dns -f "$TUNNEL_NAME" "$TUNNEL_HOST" >/dev/null
+}
+
+start_tunnel_background() {
+  if tunnel_running; then
+    log "Tunnel already running (pid $(<"$PIDFILE"))"
+    return
+  fi
+
+  [[ -f "$CF_CONFIG" ]] || die "Missing $CF_CONFIG. Run './signals setup' first."
+
+  log "Starting tunnel in background..."
+  cloudflared tunnel --config "$CF_CONFIG" run >/dev/null 2>&1 &
+  local pid=$!
+  echo "$pid" >"$PIDFILE"
+
+  if wait_for_url "https://${TUNNEL_HOST}/v1/about" 15; then
+    log "Tunnel running (pid $pid) at https://${TUNNEL_HOST}"
+  else
+    log "WARNING: tunnel started (pid $pid) but is not reachable yet"
+  fi
+}
+
+stop_tunnel() {
+  if tunnel_running; then
+    local pid
+    pid="$(<"$PIDFILE")"
+    kill "$pid" >/dev/null 2>&1 || true
+    log "Tunnel stopped (pid $pid)"
+  else
+    log "Tunnel was not running"
+  fi
+  rm -f "$PIDFILE"
+}
+
+put_secret() {
+  local key="$1"
+  local value="$2"
+  npx wrangler secret put "$key" <<<"$value" >/dev/null 2>&1
+}
+
+deploy_worker() {
+  local token="${1:-}"
+  [[ -n "$token" ]] || token="$(openssl rand -hex 32)"
+
+  log "Setting worker secrets..."
+  put_secret SIGNAL_CLI_URL "https://${TUNNEL_HOST}"
+  put_secret SIGNAL_ACCOUNT "$SIGNAL_ACCOUNT"
+  put_secret SIGNAL_RECIPIENT "$SIGNAL_RECIPIENT"
+  put_secret SIGNAL_WEBHOOK_TOKEN "$token"
+
+  log "Deploying worker..."
+  npm run deploy --silent >/dev/null
+
+  DEPLOY_TOKEN="$token"
+  log "Worker deployed"
+  log "Token: $token"
+}
+
+e2e_test() {
+  local token="$1"
+  local output_file="/tmp/signal-e2e.json"
+  local http body
+
+  log "Running E2E test..."
+  http="$(
+    curl -sS -o "$output_file" -w "%{http_code}" \
+      --max-time 15 \
+      -X POST "$WORKER_URL" \
+      -H "Content-Type: application/json" \
+      -H "X-Webhook-Token: $token" \
+      -d '{"message":"signals test"}' || true
+  )"
+
+  if [[ "$http" == "200" ]]; then
+    log "E2E passed; check Signal for the test message."
+    return 0
+  fi
+
+  body="$(<"$output_file" 2>/dev/null || true)"
+  die "E2E failed (HTTP ${http:-unknown}): $body"
+}
+
+usage() {
+  cat <<EOF
+$APP_NAME - Send Signal messages from the cloud
+
+Usage:
+  ./signals setup             First-time setup (interactive)
+  ./signals up                Start tunnel + docker
+  ./signals up <token>        Start + redeploy worker with token
+  ./signals down              Stop docker container
+  ./signals uninstall         Remove tunnel/worker/container/config
+EOF
+}
+
+cmd_setup() {
+  local token cleanup="0"
+
+  load_env
+  check_prereqs
+  trap '[[ "$cleanup" == "1" ]] && stop_tunnel >/dev/null 2>&1 || true' EXIT
+
+  log "Domain:    $DOMAIN"
+  log "Account:   $(mask "$SIGNAL_ACCOUNT")"
+  log "Recipient: $(mask "$SIGNAL_RECIPIENT")"
+  log ""
+
+  log "--- Docker ---"
+  ensure_docker
+  log ""
+
+  log "--- Link Signal Device ---"
+  log "Open: ${LOCAL_API}/v1/qrcodelink?device_name=mac"
+  log "Then in Signal: Settings > Linked Devices > scan QR"
+  read -rp "Press Enter once linked (or skip if already done)..."
+  log ""
+
+  log "--- Cloudflare Tunnel ---"
+  ensure_tunnel
+  log "Tunnel ID: $TUNNEL_ID"
+  write_cloudflared_config
+  log ""
+
+  log "--- Start Tunnel ---"
+  start_tunnel_background
+  cleanup="1"
+  log ""
+
+  log "--- Deploy Worker ---"
+  ensure_wrangler_config
+  npm install --silent >/dev/null
+  deploy_worker
+  token="$DEPLOY_TOKEN"
+  log ""
+
+  log "--- Test ---"
+  e2e_test "$token"
+  log ""
+
+  stop_tunnel >/dev/null 2>&1 || true
+  cleanup="0"
+  trap - EXIT
+
+  cat <<EOF
+==========================================
+Setup complete.
+Worker: $WORKER_URL
+Token:  $token
+
+Start the tunnel:
+  ./signals up "$token"
+==========================================
+EOF
+}
+
+cmd_up() {
+  local token="${1:-}"
+
+  load_env
+  check_prereqs
+
+  log "Starting signals..."
+  ensure_docker
+
+  [[ -f "$CF_CONFIG" ]] || die "Missing $CF_CONFIG. Run './signals setup' first."
+  ensure_wrangler_config
+
+  if [[ -n "$token" ]]; then
+    log "Redeploying worker with provided token..."
+    deploy_worker "$token" >/dev/null
+    log "Worker redeployed"
+  fi
+
+  log "signals is up at $WORKER_URL"
+  log "Press Ctrl+C to stop tunnel."
+  trap 'log ""; log "Tunnel stopped"; exit 0' INT TERM
+  cloudflared tunnel --config "$CF_CONFIG" run
+}
+
+cmd_down() {
+  log "Stopping signals..."
+  docker stop "$CONTAINER_NAME" >/dev/null 2>&1 \
+    && log "Docker container stopped" \
+    || log "Container not running"
+  log "Tunnel: stop via Ctrl+C in terminal running './signals up'"
+}
+
+cmd_uninstall() {
+  local confirm
+
+  check_prereqs
+
+  cat <<EOF
+This will remove:
+  - Cloudflare tunnel '${TUNNEL_NAME}' and its DNS route
+  - Docker container '${CONTAINER_NAME}'
+  - $CF_CONFIG
+  - Cloudflare Worker '${WORKER_NAME}'
+EOF
+  read -rp "Continue? [y/N] " confirm
+  [[ "$confirm" == [yY] ]] || {
+    log "Aborted."
+    exit 0
+  }
+
+  stop_tunnel >/dev/null 2>&1 || true
+
+  log "Deleting worker..."
+  npx wrangler delete --name "$WORKER_NAME" >/dev/null 2>&1 || log "(worker not found or already deleted)"
+
+  log "Deleting tunnel..."
+  cloudflared tunnel cleanup "$TUNNEL_NAME" >/dev/null 2>&1 || true
+  cloudflared tunnel delete "$TUNNEL_NAME" >/dev/null 2>&1 || log "(tunnel not found or already deleted)"
+
+  rm -f "$CF_CONFIG"
+  log "Removed $CF_CONFIG"
+
+  log "Removing Docker container..."
+  docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  docker rm "$CONTAINER_NAME" >/dev/null 2>&1 || log "(container not found)"
+  log "Docker container removed"
+
+  log "Uninstalled. Signal data remains in ~/.local/share/signal-cli"
+}
+
+main() {
+  case "${1:-}" in
+    setup) cmd_setup ;;
+    up) cmd_up "${2:-}" ;;
+    down) cmd_down ;;
+    uninstall) cmd_uninstall ;;
+    -h|--help|help|"") usage ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "${1:-}"
