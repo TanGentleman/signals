@@ -1,10 +1,12 @@
 #!/bin/sh
 set -eu
 
-REPO_URL="${SIGNALS_REPO_URL:-https://github.com/yourusername/signals.git}"
 INSTALL_DIR="${SIGNALS_INSTALL_DIR:-$HOME/.signals}"
 BIN_DIR="${HOME}/.local/bin"
 BIN_PATH="${BIN_DIR}/signals"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+LOCAL_SIGNALS="${SCRIPT_DIR}/signals"
+REPO_URL="${SIGNALS_REPO_URL:-}"
 
 log() {
   printf '%s\n' "$*"
@@ -34,22 +36,31 @@ confirm() {
 
 require_cmd git bash
 
-if [ -d "$INSTALL_DIR/.git" ]; then
-  log "Updating existing install at $INSTALL_DIR..."
-  git -C "$INSTALL_DIR" pull --ff-only
+if [ -x "$LOCAL_SIGNALS" ] && [ -f "${SCRIPT_DIR}/README.md" ]; then
+  log "Using local checkout at $SCRIPT_DIR"
+  TARGET_SIGNALS="$LOCAL_SIGNALS"
 else
-  log "Cloning signals into $INSTALL_DIR..."
-  mkdir -p "$(dirname "$INSTALL_DIR")"
-  git clone "$REPO_URL" "$INSTALL_DIR"
+  [ -n "$REPO_URL" ] || die "No local checkout detected. Set SIGNALS_REPO_URL to your repo URL."
+
+  if [ -d "$INSTALL_DIR/.git" ]; then
+    log "Updating existing install at $INSTALL_DIR..."
+    git -C "$INSTALL_DIR" pull --ff-only
+  else
+    log "Cloning signals into $INSTALL_DIR..."
+    mkdir -p "$(dirname "$INSTALL_DIR")"
+    git clone "$REPO_URL" "$INSTALL_DIR"
+  fi
+
+  TARGET_SIGNALS="$INSTALL_DIR/signals"
 fi
 
-[ -f "$INSTALL_DIR/signals" ] || die "Install failed: $INSTALL_DIR/signals missing"
-chmod +x "$INSTALL_DIR/signals"
+[ -f "$TARGET_SIGNALS" ] || die "Install failed: $TARGET_SIGNALS missing"
+chmod +x "$TARGET_SIGNALS"
 
 mkdir -p "$BIN_DIR"
 cat >"$BIN_PATH" <<EOF
 #!/usr/bin/env bash
-exec "$INSTALL_DIR/signals" "\$@"
+exec "$TARGET_SIGNALS" "\$@"
 EOF
 chmod +x "$BIN_PATH"
 
@@ -65,10 +76,10 @@ esac
 
 log ""
 log "Let's configure your local files (.env and wrangler.toml)."
-"$INSTALL_DIR/signals" init
+"$TARGET_SIGNALS" init
 
 if confirm "Run full setup now?"; then
-  "$INSTALL_DIR/signals" setup
+  "$TARGET_SIGNALS" setup
 else
   log ""
   log "Next steps:"

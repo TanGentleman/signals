@@ -17,7 +17,7 @@ Any service that can make an HTTP POST — AI agents, cron jobs, webhooks — ca
 ## Quick start
 
 ```bash
-curl -LsSf https://my-url/install.sh | bash
+curl -LsSf https://raw.githubusercontent.com/TanGentleman/signals/main/install.sh | bash
 ```
 
 The installer:
@@ -29,7 +29,7 @@ The installer:
 Manual fallback:
 
 ```bash
-git clone https://github.com/yourusername/signals.git && cd signals
+git clone https://github.com/TanGentleman/signals.git && cd signals
 ./signals init
 ./signals setup
 ```
@@ -48,18 +48,27 @@ git clone https://github.com/yourusername/signals.git && cd signals
 ```bash
 signals init                # generate local .env + wrangler.toml
 signals setup               # first-time: docker, tunnel, worker, e2e test
-signals up                  # start tunnel + docker
-signals up <token>          # start + redeploy worker with new token
+signals setup --no-deploy   # first-time: docker + tunnel only (no worker deploy)
+signals up                  # start tunnel + docker (redeploys token if SIGNAL_WEBHOOK_TOKEN is set in .env)
+signals up <token>          # start + redeploy worker with provided token
 signals down                # stop tunnel
 signals uninstall           # remove tunnel, worker, docker container
 
 # or, from inside the repo:
 ./signals setup             # first-time: docker, tunnel, worker, e2e test
-./signals up                # start tunnel + docker
-./signals up <token>        # start + redeploy worker with new token
+./signals setup --no-deploy # first-time: docker + tunnel only (no worker deploy)
+./signals up                # start tunnel + docker (redeploys token if SIGNAL_WEBHOOK_TOKEN is set in .env)
+./signals up <token>        # start + redeploy worker with provided token
 ./signals down              # stop tunnel
 ./signals uninstall         # remove tunnel, worker, docker container
 ```
+
+Token behavior:
+- `setup` deploys worker auth unless you pass `--no-deploy`.
+- `setup` uses a secure random token unless you set `SIGNAL_WEBHOOK_TOKEN` in `.env`.
+- `up <token>` redeploys worker auth with the provided token and verifies registration.
+- `up` also redeploys token auth when `SIGNAL_WEBHOOK_TOKEN` exists in `.env`.
+- Custom tokens only need to be non-empty.
 
 ## Usage
 
@@ -116,6 +125,30 @@ await fetch("https://signal-agent.yourdomain.com/notify", {
 | Message not received | Wrong phone number format — must be E.164 (`+1...`) |
 | Docker container stopped | `docker start signal-bridge` |
 | Device unlinked | Re-link at `http://localhost:8080/v1/qrcodelink?device_name=mac` |
+
+## Uninstall scope
+
+`signals uninstall` removes infrastructure managed by this project:
+- Cloudflare tunnel `signal-bridge` and its DNS route
+- Cloudflare Worker `signal-agent`
+- Docker container `signal-bridge`
+- `~/.cloudflared/config.yml`
+
+It intentionally keeps local state:
+- Signal linked-device data in `~/.local/share/signal-cli`
+- Other Cloudflare files in `~/.cloudflared` (for example `cert.pem` and tunnel credentials)
+- Your repo checkout and launcher script
+
+Optional full cleanup (destructive):
+
+```bash
+./signals uninstall
+rm -f ~/.local/bin/signals
+rm -rf ~/.signals
+# Optional: remove all Signal + Cloudflare local state too
+rm -rf ~/.local/share/signal-cli
+rm -rf ~/.cloudflared
+```
 
 ## Security note
 

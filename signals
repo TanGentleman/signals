@@ -140,6 +140,11 @@ valid_e164() {
   [[ "$number" =~ ^\+[1-9][0-9]{7,14}$ ]]
 }
 
+valid_token() {
+  local token="$1"
+  [[ -n "$token" ]]
+}
+
 prompt_domain() {
   local default="$1"
   local value
@@ -190,6 +195,8 @@ write_env_file() {
 DOMAIN=$domain
 SIGNAL_ACCOUNT=$account
 SIGNAL_RECIPIENT=$recipient
+# Optional: stable webhook token (non-empty)
+# SIGNAL_WEBHOOK_TOKEN=
 EOF
 }
 
@@ -369,6 +376,7 @@ put_secret() {
 deploy_worker() {
   local token="${1:-}"
   [[ -n "$token" ]] || token="$(openssl rand -hex 32)"
+  valid_token "$token" || die "Invalid token. Token must be non-empty."
 
   log "Setting worker secrets..."
   put_secret SIGNAL_CLI_URL "https://${TUNNEL_HOST}"
@@ -423,7 +431,8 @@ $APP_NAME - Send Signal messages from the cloud
 
 Usage:
   ./signals init              Create local .env + wrangler.toml
-  ./signals setup             First-time setup (interactive)
+  ./signals setup             First-time setup + deploy + test
+  ./signals setup --no-deploy First-time setup only (no worker deploy)
   ./signals up                Start tunnel + docker
   ./signals up <token>        Start + redeploy worker with token
   ./signals down              Stop docker container
@@ -473,6 +482,14 @@ cmd_init() {
 
 cmd_setup() {
   local token cleanup="0"
+  local no_deploy="0"
+  local setup_arg="${1:-}"
+
+  if [[ "$setup_arg" == "--no-deploy" ]]; then
+    no_deploy="1"
+  elif [[ -n "$setup_arg" ]]; then
+    die "Unknown setup option: $setup_arg"
+  fi
 
   load_env
   check_prereqs
@@ -499,6 +516,20 @@ cmd_setup() {
   write_cloudflared_config
   log ""
 
+  if [[ "$no_deploy" == "1" ]]; then
+    trap - EXIT
+    cat <<EOF
+==========================================
+Setup complete (no deploy).
+Worker route: $WORKER_URL
+
+When ready, deploy + start with:
+  ./signals up "<your-token>"
+==========================================
+EOF
+    return
+  fi
+
   log "--- Start Tunnel ---"
   start_tunnel_background
   cleanup="1"
@@ -507,7 +538,7 @@ cmd_setup() {
   log "--- Deploy Worker ---"
   ensure_wrangler_config
   npm install --silent >/dev/null
-  deploy_worker
+  deploy_worker "${SIGNAL_WEBHOOK_TOKEN:-}"
   token="$DEPLOY_TOKEN"
   log ""
 
@@ -535,6 +566,8 @@ EOF
 
 cmd_up() {
   local token="${1:-}"
+  local redeploy_source=""
+  local tunnel_pid=""
 
   load_env
   check_prereqs
@@ -546,14 +579,38 @@ cmd_up() {
   ensure_wrangler_config
 
   if [[ -n "$token" ]]; then
-    log "Redeploying worker with provided token..."
-    deploy_worker "$token" >/dev/null
-    log "Worker redeployed"
+    redeploy_source="argument"
+  elif [[ -n "${SIGNAL_WEBHOOK_TOKEN:-}" ]]; then
+    token="$SIGNAL_WEBHOOK_TOKEN"
+    redeploy_source=".env"
+  fi
+
+  if [[ -n "$redeploy_source" ]]; then
+    valid_token "$token" || die "Invalid token from $redeploy_source. Token must be non-empty."
+    log "Redeploying worker with token from ${redeploy_source}..."
+    deploy_worker "$token"
   fi
 
   log "signals is up at $WORKER_URL"
   log "Press Ctrl+C to stop tunnel."
-  trap 'log ""; log "Tunnel stopped"; exit 0' INT TERM
+  trap 'log ""; [[ -n "$tunnel_pid" ]] && kill "$tunnel_pid" >/dev/null 2>&1 || true; log "Tunnel stopped"; exit 0' INT TERM
+
+  if [[ -n "$redeploy_source" ]]; then
+    # Keep tunnel running while we verify the fresh token.
+    cloudflared tunnel --config "$CF_CONFIG" run &
+    tunnel_pid=$!
+
+    log "Waiting for tunnel to become reachable..."
+    wait_for_url "https://${TUNNEL_HOST}/v1/about" 20 || die "Tunnel not reachable; cannot verify token registration."
+
+    log "Verifying token registration..."
+    e2e_test "$token"
+    log "Worker redeployed"
+
+    wait "$tunnel_pid"
+    return
+  fi
+
   cloudflared tunnel --config "$CF_CONFIG" run
 }
 
@@ -608,7 +665,7 @@ main() {
   cd "$PROJECT_DIR"
   case "${1:-}" in
     init) cmd_init ;;
-    setup) cmd_setup ;;
+    setup) cmd_setup "${2:-}" ;;
     up) cmd_up "${2:-}" ;;
     down) cmd_down ;;
     uninstall) cmd_uninstall ;;
@@ -620,4 +677,4 @@ main() {
   esac
 }
 
-main "${1:-}"
+main "$@"
