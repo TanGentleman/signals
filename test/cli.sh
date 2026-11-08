@@ -154,6 +154,56 @@ test_down() {
   expect_contains "$WORK/out" "Docker container stopped"
 }
 
+# up with a token redeploys the worker, keeps the tunnel up while it checks the
+# token end to end, then waits on the tunnel (which the fake ends after 1s).
+test_up_redeploys_token() {
+  sandbox
+  run env "${config_env[@]}" "$CHECKOUT/signals" init
+  printf '\n' | run "$CHECKOUT/signals" setup --no-deploy
+  : >"$WORK/calls.log"
+  FAKE_TUNNEL_SECONDS=1 run "$CHECKOUT/signals" up up-token || fail "up exited non-zero"
+  expect_contains "$WORK/out" "Redeploying worker with token from argument"
+  expect_contains "$WORK/calls.log" "npx wrangler secret put SIGNAL_WEBHOOK_TOKEN"
+  expect_contains "$WORK/calls.log" "npm run deploy --silent"
+  expect_contains "$WORK/calls.log" "cloudflared tunnel --config $HOME_DIR/.cloudflared/config.yml run"
+  expect_contains "$WORK/calls.log" "X-Webhook-Token: up-token"
+  expect_contains "$WORK/out" "Worker redeployed"
+}
+
+test_up_without_token_skips_deploy() {
+  sandbox
+  run env "${config_env[@]}" "$CHECKOUT/signals" init
+  printf '\n' | run "$CHECKOUT/signals" setup --no-deploy
+  : >"$WORK/calls.log"
+  FAKE_TUNNEL_SECONDS=1 run "$CHECKOUT/signals" up || fail "up exited non-zero"
+  expect_not_contains "$WORK/calls.log" "npm run deploy"
+  expect_contains "$WORK/calls.log" "cloudflared tunnel --config $HOME_DIR/.cloudflared/config.yml run"
+}
+
+test_up_needs_setup() {
+  sandbox
+  run env "${config_env[@]}" "$CHECKOUT/signals" init
+  if run "$CHECKOUT/signals" up; then fail "up without a tunnel config exited 0"; fi
+  expect_contains "$WORK/out" "Run './signals setup' first."
+}
+
+test_uninstall() {
+  sandbox
+  run env "${config_env[@]}" "$CHECKOUT/signals" init
+  printf '\n' | run "$CHECKOUT/signals" setup --no-deploy
+  printf 'n\n' | run "$CHECKOUT/signals" uninstall || fail "uninstall abort exited non-zero"
+  expect_contains "$WORK/out" "Aborted."
+  [[ -f "$HOME_DIR/.cloudflared/config.yml" ]] || fail "aborted uninstall removed config.yml"
+
+  : >"$WORK/calls.log"
+  printf 'y\n' | run "$CHECKOUT/signals" uninstall || fail "uninstall exited non-zero"
+  expect_contains "$WORK/calls.log" "npx wrangler delete --name signal-agent"
+  expect_contains "$WORK/calls.log" "cloudflared tunnel delete signal-bridge"
+  expect_contains "$WORK/calls.log" "docker rm signal-bridge"
+  [[ ! -e "$HOME_DIR/.cloudflared/config.yml" ]] || fail "uninstall left config.yml"
+  [[ -f "$HOME_DIR/.cloudflared/cert.pem" ]] || fail "uninstall removed cert.pem"
+}
+
 # The README quick start: curl ... | bash, cloning the repo, with answers typed
 # at the terminal. bash reads the script from the pipe, so the prompts have to
 # read /dev/tty. script(1) from util-linux provides the terminal.
@@ -188,6 +238,10 @@ tests=(
   test_setup_reports_e2e_failure
   test_setup_no_deploy
   test_down
+  test_up_redeploys_token
+  test_up_without_token_skips_deploy
+  test_up_needs_setup
+  test_uninstall
   test_curl_pipe_install
 )
 for t in "${@:-${tests[@]}}"; do

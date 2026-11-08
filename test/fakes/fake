@@ -12,7 +12,7 @@ case "$name" in
     case "$1 $2" in
       "tunnel info") exit 1 ;;
       "tunnel create") echo "Created tunnel signal-bridge with id $FAKE_TUNNEL_ID" ;;
-      "tunnel --config") exec sleep 30 ;;
+      "tunnel --config") exec sleep "${FAKE_TUNNEL_SECONDS:-30}" ;;
     esac
     ;;
   curl)
