@@ -53,7 +53,10 @@ in the CLI (candidates for a later cut once the CLI has tests).
   a terminal, so the README `curl | bash` quick start no longer stops at the
   first prompt (it hung in `init`, or exited 1 at the QR prompt with
   `DOMAIN` set). Tested through a pty (`script`), 10 CLI tests.
-- `signals-6` (planned): README a stranger understands in 30 seconds.
+- `signals-6` (done): README rewrite (178 -> 107 lines): example first,
+  one install block, a status-code table, cuts the Python/TS examples and
+  the long uninstall/cleanup section. Adds a test for the README curl
+  example (no JSON content type), 16 worker tests.
 
 ## Applying a branch upstream
 

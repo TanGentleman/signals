@@ -1,20 +1,29 @@
 # signals
 
-Send Signal messages from the cloud via a simple HTTP endpoint.
+Get a Signal message on your phone from anything that can make an HTTP POST:
+cron jobs, CI, AI agents, webhooks.
 
-```
-POST /notify
-     ↓
-Cloudflare Worker (auth)
-     ↓  named tunnel
-signal-cli-rest-api (Docker, your Mac)
-     ↓
-Signal message delivered
+```bash
+curl -X POST https://signal-agent.yourdomain.com/notify \
+  -H 'X-Webhook-Token: YOUR_TOKEN' \
+  -d '{"message": "Backup finished"}'
+# {"ok":true}
 ```
 
-Any service that can make an HTTP POST — AI agents, cron jobs, webhooks — can send you a Signal message.
+```
+POST /notify -> Cloudflare Worker (checks token) -> named tunnel
+             -> signal-cli-rest-api in Docker on your Mac -> Signal
+```
 
-## Quick start
+The Mac runs Signal as a linked device of your phone; nothing is hosted
+except a small Worker on your own Cloudflare account.
+
+## Install
+
+Needs macOS with [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+running, `brew install cloudflared node` (Node 22+), Signal on your phone, and a
+domain on Cloudflare (a free account works; buy one under Registrar or point an
+existing domain's nameservers at Cloudflare).
 
 ```bash
 DOMAIN=yourdomain.com \
@@ -23,156 +32,76 @@ SIGNAL_RECIPIENT=+1XXXXXXXXXX \
   curl -LsSf https://raw.githubusercontent.com/TanGentleman/signals/main/install.sh | bash
 ```
 
-Fill in your values and paste. The installer will clone the repo, write your config, and kick off setup — stopping only to ask you to scan the Signal QR code.
+It clones to `~/.signals`, adds a `signals` launcher to `~/.local/bin`, writes
+`.env` and `wrangler.toml`, then runs `signals setup`: starts the Docker
+container, opens a QR code to link Signal, creates the tunnel
+`signal-bridge.yourdomain.com`, deploys the Worker at
+`signal-agent.yourdomain.com` and sends a test message. It prints the token at
+the end. Leave out the variables to be prompted instead.
 
-The installer:
-- installs to `~/.signals`
-- creates a `signals` launcher in `~/.local/bin`
-- writes `.env` and `wrangler.toml` from your env vars (or prompts if not set)
-- runs `signals setup`
+`SIGNAL_ACCOUNT` is the number Signal runs under on your phone;
+`SIGNAL_RECIPIENT` is who gets the messages (can be the same number). Both in
+E.164 format.
 
-Manual fallback:
+Without the installer:
 
 ```bash
 git clone https://github.com/TanGentleman/signals.git && cd signals
-./signals init
-./signals setup
+./signals init && ./signals setup
 ```
 
-## Prerequisites
+## API
 
-- macOS
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — install and open it before running setup
-- `cloudflared` — `brew install cloudflared`
-- Node.js / npm — `brew install node`
-- Signal installed on your phone
-- A Cloudflare account with a domain — see below
+`POST /notify` with header `X-Webhook-Token` and a JSON body
+`{"message": "..."}` (a missing message sends "Agent notification").
 
-### Getting a Cloudflare domain
-
-You need a domain whose DNS is managed by Cloudflare (free account is fine).
-
-**Option A — buy a domain through Cloudflare** (easiest): go to [dash.cloudflare.com](https://dash.cloudflare.com) → Registrar → Register a domain. It lands in your account ready to use.
-
-**Option B — use a domain you already own**: in the Cloudflare dashboard, add the domain as a new site, then update its nameservers at your registrar to the ones Cloudflare gives you. Takes ~5 minutes to propagate.
-
-Either way, once your domain is active in Cloudflare, you're ready to run `signals init`.
+| Status | Meaning |
+|---|---|
+| 200 `{"ok":true}` | sent |
+| 400 | body is not JSON |
+| 401 | missing or wrong token |
+| 404 | any other method or path |
+| 413 | body over 64 KiB |
+| 500 | the Worker has no `SIGNAL_WEBHOOK_TOKEN`: run `signals up <token>` |
+| 502 | tunnel or Docker is down (`signals up`), or signal-cli-rest-api returned an error (shown in the body) |
 
 ## CLI
 
 ```bash
-signals init                # generate local .env + wrangler.toml
-signals setup               # first-time: docker, tunnel, worker, e2e test
-signals setup --no-deploy   # first-time: docker + tunnel only (no worker deploy)
-signals up                  # start tunnel + docker (redeploys token if SIGNAL_WEBHOOK_TOKEN is set in .env)
-signals up <token>          # start + redeploy worker with provided token
-signals down                # stop tunnel + docker container
-signals uninstall           # remove tunnel, worker, docker container
+signals init                # write .env and wrangler.toml
+signals setup               # docker, QR link, tunnel, worker, test message
+signals setup --no-deploy   # docker and tunnel only
+signals up [token]          # start tunnel and docker; redeploy the token if given or set in .env
+signals down                # stop tunnel and docker
+signals uninstall           # remove the tunnel, DNS route, worker, container and ~/.cloudflared/config.yml
 ```
 
-From a checkout, run the same commands as `./signals <command>`.
+From a checkout, use `./signals`. Set `SIGNAL_WEBHOOK_TOKEN` in `.env` to keep
+the same token across `setup` runs; otherwise `setup` makes a random one.
+`uninstall` keeps the linked-device data in `~/.local/share/signal-cli`, the
+rest of `~/.cloudflared`, the checkout and the launcher.
 
-Token behavior:
-- `setup` deploys worker auth unless you pass `--no-deploy`.
-- `setup` uses a secure random token unless you set `SIGNAL_WEBHOOK_TOKEN` in `.env`.
-- `up <token>` redeploys worker auth with the provided token and verifies registration.
-- `up` also redeploys token auth when `SIGNAL_WEBHOOK_TOKEN` exists in `.env`.
-- Custom tokens only need to be non-empty.
+If messages stop arriving: `docker start signal-bridge`, or re-link at
+`http://localhost:8080/v1/qrcodelink?device_name=mac`.
 
-## Usage
+## Security
 
-Send a message:
+The Worker compares tokens in constant time and never logs them. The tunnel
+hostname `signal-bridge.yourdomain.com` is public, and anyone who finds it can
+POST to signal-cli-rest-api directly, skipping the token. Keep the subdomain
+hard to guess, or put a Cloudflare Access service-token policy on it (free,
+Zero Trust dashboard).
 
-```bash
-curl -X POST https://signal-agent.yourdomain.com/notify \
-  -H 'Content-Type: application/json' \
-  -H 'X-Webhook-Token: YOUR_TOKEN' \
-  -d '{"message": "Hello from the cloud"}'
-```
-
-From Python:
-
-```python
-import httpx
-
-httpx.post(
-    "https://signal-agent.yourdomain.com/notify",
-    headers={"X-Webhook-Token": "YOUR_TOKEN"},
-    json={"message": "Job finished"},
-)
-```
-
-From JavaScript/TypeScript:
-
-```ts
-await fetch("https://signal-agent.yourdomain.com/notify", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "X-Webhook-Token": "YOUR_TOKEN",
-  },
-  body: JSON.stringify({ message: "Job finished" }),
-});
-```
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `install.sh` | Installer for `curl ... | bash` flow |
-| `signals` | CLI — setup, up, down, uninstall |
-| `src/index.ts` | Cloudflare Worker — auth + relay to signal-cli-rest-api |
-| `wrangler.toml.example` | Worker config template (copy to local `wrangler.toml`) |
-| `.env.example` | Config template — domain, phone numbers |
-
-## Troubleshooting
-
-| Symptom | Check |
-|---|---|
-| Worker returns 502 | Is tunnel running? `./signals up` |
-| 401 Unauthorized | Token mismatch — check `X-Webhook-Token` header |
-| 500 `SIGNAL_WEBHOOK_TOKEN is not set` | Worker has no token secret — `./signals up <token>` |
-| 413 Payload Too Large | Request body is over 64 KiB |
-| Message not received | Wrong phone number format — must be E.164 (`+1...`) |
-| Docker container stopped | `docker start signal-bridge` |
-| Device unlinked | Re-link at `http://localhost:8080/v1/qrcodelink?device_name=mac` |
-
-## Uninstall scope
-
-`signals uninstall` removes infrastructure managed by this project:
-- Cloudflare tunnel `signal-bridge` and its DNS route
-- Cloudflare Worker `signal-agent`
-- Docker container `signal-bridge`
-- `~/.cloudflared/config.yml`
-
-It intentionally keeps local state:
-- Signal linked-device data in `~/.local/share/signal-cli`
-- Other Cloudflare files in `~/.cloudflared` (for example `cert.pem` and tunnel credentials)
-- Your repo checkout and launcher script
-
-Optional full cleanup (destructive):
-
-```bash
-./signals uninstall
-rm -f ~/.local/bin/signals
-rm -rf ~/.signals
-# Optional: remove all Signal + Cloudflare local state too
-rm -rf ~/.local/share/signal-cli
-rm -rf ~/.cloudflared
-```
-
-## Security note
-
-`signal-bridge.yourdomain.com` is publicly resolvable — anyone who finds it can POST to signal-cli directly, bypassing Worker auth. A non-guessable subdomain is sufficient for personal use. For stronger protection, add a Cloudflare Access service-token policy on that hostname (free tier, Zero Trust dashboard).
-
-## Local dev
+## Development
 
 ```bash
 npm ci
-cp .dev.vars.example .dev.vars           # fill in values
-cp wrangler.toml.example wrangler.toml   # or ./signals init
-npx wrangler dev                         # → http://localhost:8787/notify
 npm run type-check
 npm test                                 # worker tests in workerd, no account needed
-npm run test:cli                         # install.sh + CLI against fake docker/cloudflared
+npm run test:cli                         # install.sh and CLI against fake docker/cloudflared
+cp .dev.vars.example .dev.vars           # fill in values
+cp wrangler.toml.example wrangler.toml   # or ./signals init
+npx wrangler dev                         # http://localhost:8787/notify
 ```
+
+`src/index.ts` is the Worker, `signals` the CLI, `install.sh` the installer.

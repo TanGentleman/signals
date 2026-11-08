@@ -131,6 +131,19 @@ describe("relay", () => {
     );
   });
 
+  it("accepts the README curl example, which has no JSON content type", async ({ expect }) => {
+    const response = await call({
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Webhook-Token": env.SIGNAL_WEBHOOK_TOKEN,
+      },
+      body: '{"message": "Backup finished"}',
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(JSON.parse(String(upstream[0].init.body)).message).toBe("Backup finished");
+  });
+
   it("rejects invalid JSON", async ({ expect }) => {
     const response = await notify("not json");
     expect(response.status).toBe(400);
