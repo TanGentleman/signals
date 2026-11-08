@@ -34,7 +34,7 @@ Keep: the 80-line worker, `/notify` contract, the CLI's `init`/`setup`/`up`/
 
 Cut or shrink: duplicated CLI docs (done in -1), `signals up <token>`
 redeploy-and-verify path and the PID-file plus pgrep double tunnel tracking
-in the CLI (candidates for a later cut once the CLI has tests).
+in the CLI (candidates for a later cut, now that the CLI has tests in -4).
 
 ## Stack
 
@@ -67,13 +67,17 @@ git format-patch --relative=signals "$base"..origin/signals-1 -o /tmp/signals-1
 # in a clean upstream clone at 500b826
 git clone https://github.com/TanGentleman/signals && cd signals
 git am /tmp/signals-1/*.patch
-npm ci && npm run type-check && npm test && shellcheck signals install.sh
+npm ci && npm run type-check && shellcheck signals install.sh
+npm test           # from signals-2 on
 npm run test:cli   # from signals-4 on
 ```
 
 For a stacked branch, use the previous branch as the base:
 `origin/signals-1..origin/signals-2`. No CRLF files, so `--keep-cr` is not
-needed.
+needed. Checked 2026-11-08: applying `-1` through `-6` in order to a fresh
+clone of 500b826 gives trees identical to each branch's `signals/`, and
+type-check, tests, shellcheck, `wrangler deploy --dry-run` and `npm audit`
+(0) pass at every step on Node 24; `-6` also passes on Node 22.23.
 
 ## Needs Tan
 
@@ -85,4 +89,9 @@ needed.
 - `signals-5` changes installer input: under `curl | bash` the prompts read
   `/dev/tty`. Without a terminal (CI) it reads stdin as before. Tested on
   Linux only; macOS `/dev/tty` behaves the same but was not run.
+- `signals-6` drops the Python/TypeScript examples and the uninstall
+  cleanup commands from the README; restore any you want back.
+- CI (`.github/workflows/ci.yml`) has not run on GitHub: it only runs once
+  applied upstream. The pty test needs util-linux `script` and skips
+  elsewhere.
 - Nothing here was run against Cloudflare or a real Signal account.
