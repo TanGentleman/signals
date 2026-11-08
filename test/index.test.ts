@@ -78,14 +78,23 @@ describe("auth", () => {
     expect(upstream).toHaveLength(0);
   });
 
-  it("skips auth when SIGNAL_WEBHOOK_TOKEN is unset", async ({ expect }) => {
+  it("fails closed when SIGNAL_WEBHOOK_TOKEN is unset", async ({ expect }) => {
     const { SIGNAL_WEBHOOK_TOKEN: _, ...noToken } = env;
     const response = await call(
       { headers: { "Content-Type": "application/json" }, body: "{}" },
       noToken,
     );
-    expect(response.status).toBe(200);
-    expect(upstream).toHaveLength(1);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "SIGNAL_WEBHOOK_TOKEN is not set",
+    });
+    expect(upstream).toHaveLength(0);
+  });
+
+  it("rejects a token that is a prefix of the real one", async ({ expect }) => {
+    const response = await notify('{"message":"hi"}', "test-toke");
+    expect(response.status).toBe(401);
+    expect(upstream).toHaveLength(0);
   });
 
   it("does not echo the token in the response", async ({ expect }) => {

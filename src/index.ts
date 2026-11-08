@@ -5,6 +5,17 @@ interface Env {
   SIGNAL_WEBHOOK_TOKEN?: string;
 }
 
+// Compare SHA-256 digests so the comparison takes the same time whatever the
+// token length or the position of the first differing byte.
+async function tokensMatch(given: string, expected: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(given)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(a, b);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -16,11 +27,15 @@ export default {
       });
     }
 
-    // Auth: require matching X-Webhook-Token if secret is set
-    if (
-      env.SIGNAL_WEBHOOK_TOKEN &&
-      request.headers.get("X-Webhook-Token") !== env.SIGNAL_WEBHOOK_TOKEN
-    ) {
+    if (!env.SIGNAL_WEBHOOK_TOKEN) {
+      return new Response(
+        JSON.stringify({ error: "SIGNAL_WEBHOOK_TOKEN is not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = request.headers.get("X-Webhook-Token");
+    if (token === null || !(await tokensMatch(token, env.SIGNAL_WEBHOOK_TOKEN))) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
