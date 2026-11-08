@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TUNNEL_ID="123e4567-e89b-12d3-a456-426614174000"
 failures=0
 work_dirs=()
-trap 'rm -rf "${work_dirs[@]}"' EXIT
+trap '[[ -n "${KEEP_TMP:-}" ]] || rm -rf "${work_dirs[@]}"' EXIT
 
 fail() {
   printf 'FAIL: %s\n' "$*"
@@ -154,6 +154,30 @@ test_down() {
   expect_contains "$WORK/out" "Docker container stopped"
 }
 
+# The README quick start: curl ... | bash, cloning the repo, with answers typed
+# at the terminal. bash reads the script from the pipe, so the prompts have to
+# read /dev/tty. script(1) from util-linux provides the terminal.
+test_curl_pipe_install() {
+  if ! script --version 2>/dev/null | grep -q util-linux; then
+    echo "skip test_curl_pipe_install (needs util-linux script)"
+    return
+  fi
+  sandbox
+  git -C "$CHECKOUT" init -q
+  git -C "$CHECKOUT" add -A
+  git -C "$CHECKOUT" -c user.name=test -c user.email=test@example.com commit -qm test
+  # domain, account, recipient, "Run full setup now?", "Press Enter once linked"
+  printf 'example.com\n+15550000001\n+15550000002\n\n\n' |
+    run env SIGNALS_REPO_URL="$CHECKOUT" SIGNALS_INSTALL_DIR="$WORK/install" \
+      timeout 60 script -qec "cd '$WORK' && cat '$CHECKOUT/install.sh' | bash" /dev/null \
+    || fail "curl | bash install exited non-zero"
+  expect_contains "$WORK/out" "Cloning signals into $WORK/install"
+  expect_contains "$WORK/install/.env" "DOMAIN=example.com"
+  expect_contains "$WORK/install/.env" "SIGNAL_RECIPIENT=+15550000002"
+  expect_contains "$WORK/calls.log" "-X POST https://signal-agent.example.com/notify"
+  expect_contains "$WORK/out" "Setup complete."
+}
+
 tests=(
   test_help
   test_init_from_env
@@ -164,8 +188,9 @@ tests=(
   test_setup_reports_e2e_failure
   test_setup_no_deploy
   test_down
+  test_curl_pipe_install
 )
-for t in "${tests[@]}"; do
+for t in "${@:-${tests[@]}}"; do
   before=$failures
   "$t"
   if [[ $failures -eq $before ]]; then echo "ok   $t"; else echo "FAIL $t"; fi

@@ -49,8 +49,10 @@ in the CLI (candidates for a later cut once the CLI has tests).
 - `signals-4` (done): 9 offline tests of `install.sh` and `./signals`
   (`npm run test:cli`) with fake docker/cloudflared/curl/npx/npm; covers
   init validation, the full setup flow, e2e failure, `--no-deploy`, `down`.
-- `signals-5` (planned): installer reads prompts from `/dev/tty` so the
-  README quick start works with `curl | bash`.
+- `signals-5` (done): installer prompts read `/dev/tty` when stdin is not
+  a terminal, so the README `curl | bash` quick start no longer stops at the
+  first prompt (it hung in `init`, or exited 1 at the QR prompt with
+  `DOMAIN` set). Tested through a pty (`script`), 10 CLI tests.
 - `signals-6` (planned): README a stranger understands in 30 seconds.
 
 ## Applying a branch upstream
@@ -77,4 +79,7 @@ needed.
 - Node 22 is now required (`engines`), because wrangler 4.158 needs it.
 - `signals-3` changes the worker contract: no token secret now means 500
   instead of an open relay, and bodies over 64 KiB get 413.
+- `signals-5` changes installer input: under `curl | bash` the prompts read
+  `/dev/tty`. Without a terminal (CI) it reads stdin as before. Tested on
+  Linux only; macOS `/dev/tty` behaves the same but was not run.
 - Nothing here was run against Cloudflare or a real Signal account.
