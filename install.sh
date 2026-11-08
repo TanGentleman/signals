@@ -4,7 +4,7 @@ set -eu
 INSTALL_DIR="${SIGNALS_INSTALL_DIR:-$HOME/.signals}"
 BIN_DIR="${HOME}/.local/bin"
 BIN_PATH="${BIN_DIR}/signals"
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
 LOCAL_SIGNALS="${SCRIPT_DIR}/signals"
 REPO_URL="${SIGNALS_REPO_URL:-https://github.com/TanGentleman/signals.git}"
 
