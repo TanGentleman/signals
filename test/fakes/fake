@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Stand-in for docker, cloudflared, curl, npx, npm and open in test/cli.sh.
+# Logs each call to $FAKE_LOG and fakes just enough output for ./signals.
+name="$(basename "$0")"
+printf '%s %s\n' "$name" "$*" >>"$FAKE_LOG"
+
+case "$name" in
+  docker)
+    [[ "$1" == "ps" ]] && exit 0
+    ;;
+  cloudflared)
+    case "$1 $2" in
+      "tunnel info") exit 1 ;;
+      "tunnel create") echo "Created tunnel signal-bridge with id $FAKE_TUNNEL_ID" ;;
+      "tunnel --config") exec sleep 30 ;;
+    esac
+    ;;
+  curl)
+    out=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        -o) out="$2"; shift ;;
+        -w) printf '%s' "${FAKE_HTTP_CODE:-200}" ;;
+      esac
+      shift
+    done
+    [[ -n "$out" ]] && printf '{"ok":true}' >"$out"
+    ;;
+  npx)
+    # wrangler secret put reads the value from stdin; drop it, log the name only.
+    [[ "$*" == "wrangler secret put "* ]] && cat >/dev/null
+    ;;
+esac
+exit 0

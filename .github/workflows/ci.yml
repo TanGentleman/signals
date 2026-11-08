@@ -20,7 +20,8 @@ jobs:
       - run: npm ci
       - run: npm run type-check
       - run: npm test
-      - run: shellcheck signals install.sh
+      - run: shellcheck signals install.sh test/cli.sh test/fakes/fake
+      - run: npm run test:cli
       - name: wrangler deploy --dry-run
         run: |
           cp wrangler.toml.example wrangler.toml

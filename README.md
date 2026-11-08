@@ -174,4 +174,5 @@ cp wrangler.toml.example wrangler.toml   # or ./signals init
 npx wrangler dev                         # → http://localhost:8787/notify
 npm run type-check
 npm test                                 # worker tests in workerd, no account needed
+npm run test:cli                         # install.sh + CLI against fake docker/cloudflared
 ```

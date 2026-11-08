@@ -46,8 +46,9 @@ in the CLI (candidates for a later cut once the CLI has tests).
   in CI.
 - `signals-3` (done): worker hardening: constant-time token compare,
   fail closed (500) without a token, 64 KiB request limit (413). 15 tests.
-- `signals-4` (planned): offline CLI and installer tests with fake
-  docker/cloudflared/npx.
+- `signals-4` (done): 9 offline tests of `install.sh` and `./signals`
+  (`npm run test:cli`) with fake docker/cloudflared/curl/npx/npm; covers
+  init validation, the full setup flow, e2e failure, `--no-deploy`, `down`.
 - `signals-5` (planned): installer reads prompts from `/dev/tty` so the
   README quick start works with `curl | bash`.
 - `signals-6` (planned): README a stranger understands in 30 seconds.
@@ -62,6 +63,7 @@ git format-patch --relative=signals "$base"..origin/signals-1 -o /tmp/signals-1
 git clone https://github.com/TanGentleman/signals && cd signals
 git am /tmp/signals-1/*.patch
 npm ci && npm run type-check && npm test && shellcheck signals install.sh
+npm run test:cli   # from signals-4 on
 ```
 
 For a stacked branch, use the previous branch as the base:
