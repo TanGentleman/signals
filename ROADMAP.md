@@ -66,24 +66,25 @@ in the CLI (candidates for a later cut, now that the CLI has tests in -4).
   tan-toolchains style: CLI and `.env` tables, a Boundaries section with what
   needs credentials and what was never run live, and the CI command set
   (shellcheck, wrangler dry run) under Development.
+- `signals-8`: README cut to 96 words; details moved to IMPLEMENTATION.md.
 
 ## Applying a branch upstream
 
 ```bash
 git clone https://github.com/TanGentleman/kranti-sandbox && cd kranti-sandbox   # private: needs access
 base=$(git log -1 --format=%H --grep='^Import signals upstream' origin/signals-1)
-git format-patch --relative=signals "$base"..origin/signals-7 -o /tmp/signals-7
+git format-patch --relative=signals "$base"..origin/signals-8 -o /tmp/signals-8
 cd .. && git clone https://github.com/TanGentleman/signals && cd signals
-git am /tmp/signals-7/*.patch
-# then the README Development commands
+git am /tmp/signals-8/*.patch
+# then the IMPLEMENTATION.md Tests commands
 ```
 
 For a stacked branch, use the previous branch as the base:
-`origin/signals-6..origin/signals-7`, or take everything with
-`"$base"..origin/signals-7`. No CRLF files, so `--keep-cr` is not needed.
-Checked 2026-11-08: applying `-1` through `-7` to a fresh clone of 500b826
-gives a tree identical to `origin/signals-7:signals`, and the README
-Development commands pass there on Node 22.23.4 and 26.13.0.
+`origin/signals-7..origin/signals-8`, or take everything with
+`"$base"..origin/signals-8`. No CRLF files, so `--keep-cr` is not needed.
+Checked 2026-11-08: applying `-1` through `-8` to a fresh clone of 500b826
+gives a tree identical to `origin/signals-8:signals`, and the IMPLEMENTATION.md
+Tests commands pass there.
 
 ## Needs Tan
 
