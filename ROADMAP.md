@@ -54,15 +54,18 @@ in the CLI (candidates for a later cut once the CLI has tests).
 ## Applying a branch upstream
 
 ```bash
-# in kranti-sandbox
-git format-patch --relative=signals origin/main..origin/signals-1 -o /tmp/signals-1
-# in a clean clone of TanGentleman/signals at 500b826
+# in kranti-sandbox: everything after the import commit
+base=$(git log -1 --format=%H --grep='^Import signals upstream' origin/signals-1)
+git format-patch --relative=signals "$base"..origin/signals-1 -o /tmp/signals-1
+# in a clean upstream clone at 500b826
+git clone https://github.com/TanGentleman/signals && cd signals
 git am /tmp/signals-1/*.patch
-npm ci && npm run type-check
+npm ci && npm run type-check && shellcheck signals install.sh
 ```
 
-The first patch (the import) is empty relative to upstream and is skipped
-by `format-patch`. For a later branch use `origin/signals-N-1..origin/signals-N`.
+For a stacked branch, use the previous branch as the base:
+`origin/signals-1..origin/signals-2`. No CRLF files, so `--keep-cr` is not
+needed.
 
 ## Needs Tan
 
