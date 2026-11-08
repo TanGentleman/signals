@@ -15,7 +15,7 @@ phone notifications from their own scripts.
 | `wrangler deploy --dry-run` | builds, 2.09 KiB | with `wrangler.toml.example` copied to `wrangler.toml` |
 | `npm audit` | 6 issues (5 high) | wrangler 4.68.1 -> miniflare, undici, ws, sharp |
 | `shellcheck signals install.sh` | 7 warnings | one is a real bug (empty e2e error body) |
-| tests | none | |
+| tests | none (added in -2) | |
 | README quick start (`DOMAIN=... curl ... \| bash`) | **exits 1** at "Press Enter once linked" | with fake docker/cloudflared/curl: `read` gets EOF from the piped script, `set -e` exits silently |
 | signal-cli-rest-api contract | matches | `POST /v2/send {number, recipients, message}`, `/v1/about`, `/v1/qrcodelink`, `MODE=native`, volume path all match upstream `src/api/api.go` and README |
 | Links in README | live | docker.com, raw install.sh, clone URL (dash.cloudflare.com blocks curl, 403) |
@@ -41,8 +41,9 @@ in the CLI (candidates for a later cut once the CLI has tests).
 - `signals-1` (done): import, type-check fix, current pinned deps (audit 0),
   shellcheck clean plus the e2e error-body fix, README CLI and local dev
   fixes, CI, this file.
-- `signals-2` (planned): worker tests in workerd (vitest +
-  `@cloudflare/vitest-plugin`) with a fake signal-cli-rest-api.
+- `signals-2` (done): 11 worker tests in workerd (vitest 5 +
+  `@cloudflare/vitest-plugin`) with a fake signal-cli-rest-api; `npm test`
+  in CI.
 - `signals-3` (planned): worker hardening: constant-time token compare,
   fail closed without a token, request size limit.
 - `signals-4` (planned): offline CLI and installer tests with fake
@@ -60,7 +61,7 @@ git format-patch --relative=signals "$base"..origin/signals-1 -o /tmp/signals-1
 # in a clean upstream clone at 500b826
 git clone https://github.com/TanGentleman/signals && cd signals
 git am /tmp/signals-1/*.patch
-npm ci && npm run type-check && shellcheck signals install.sh
+npm ci && npm run type-check && npm test && shellcheck signals install.sh
 ```
 
 For a stacked branch, use the previous branch as the base:
