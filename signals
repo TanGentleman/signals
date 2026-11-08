@@ -652,7 +652,7 @@ cmd_uninstall() {
 
   cat <<EOF
 This will remove:
-  - Cloudflare tunnel '${TUNNEL_NAME}' and its DNS route
+  - Cloudflare tunnel '${TUNNEL_NAME}' (its DNS record stays; delete it in the Cloudflare dashboard)
   - Docker container '${CONTAINER_NAME}'
   - $CF_CONFIG
   - Cloudflare Worker '${WORKER_NAME}'
