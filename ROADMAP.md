@@ -60,41 +60,38 @@ in the CLI (candidates for a later cut, now that the CLI has tests in -4).
   Review fixes on `-6`: a JSON body that is not an object (`null`) threw
   in the worker; it now gets the default message (17 worker tests). The
   README no longer says `uninstall` removes the DNS record (it never did).
+- `signals-7` (done): TypeScript 7.0.2 (all other deps were already latest);
+  CI pinned to `ubuntu-24.04` with Node 22.23.4 and 26.13.0. CLI tests for
+  `up`, `up <token>` and `uninstall` (14 CLI tests). README in the
+  tan-toolchains style: CLI and `.env` tables, a Boundaries section with what
+  needs credentials and what was never run live, and the CI command set
+  (shellcheck, wrangler dry run) under Development.
 
 ## Applying a branch upstream
 
 ```bash
-# in kranti-sandbox: everything after the import commit
+git clone https://github.com/TanGentleman/kranti-sandbox && cd kranti-sandbox
 base=$(git log -1 --format=%H --grep='^Import signals upstream' origin/signals-1)
-git format-patch --relative=signals "$base"..origin/signals-1 -o /tmp/signals-1
-# in a clean upstream clone at 500b826
-git clone https://github.com/TanGentleman/signals && cd signals
-git am /tmp/signals-1/*.patch
-npm ci && npm run type-check && shellcheck signals install.sh
-npm test           # from signals-2 on
-npm run test:cli   # from signals-4 on
+git format-patch --relative=signals "$base"..origin/signals-7 -o /tmp/signals-7
+cd .. && git clone https://github.com/TanGentleman/signals && cd signals
+git am /tmp/signals-7/*.patch
+# then the README Development commands
 ```
 
 For a stacked branch, use the previous branch as the base:
-`origin/signals-1..origin/signals-2`. No CRLF files, so `--keep-cr` is not
-needed. Checked 2026-11-08: applying `-1` through `-6` in order to a fresh
-clone of 500b826 gives trees identical to each branch's `signals/`, and
-type-check, tests, shellcheck, `wrangler deploy --dry-run` and `npm audit`
-(0) pass at every step on Node 24; `-6` also passes on Node 22.23.
+`origin/signals-6..origin/signals-7`, or take everything with
+`"$base"..origin/signals-7`. No CRLF files, so `--keep-cr` is not needed.
+Checked 2026-11-08: applying `-1` through `-7` to a fresh clone of 500b826
+gives a tree identical to `origin/signals-7:signals`, and the README
+Development commands pass there on Node 22.23.4 and 26.13.0.
 
 ## Needs Tan
 
-- `@cloudflare/workers-types` went 4 -> 5 (4.x stopped in July 2026).
-  Type-check passes; nothing else in the repo uses it.
-- Node 22 is now required (`engines`), because wrangler 4.158 needs it.
-- `signals-3` changes the worker contract: no token secret now means 500
-  instead of an open relay, and bodies over 64 KiB get 413.
-- `signals-5` changes installer input: under `curl | bash` the prompts read
-  `/dev/tty`. Without a terminal (CI) it reads stdin as before. Tested on
-  Linux only; macOS `/dev/tty` behaves the same but was not run.
-- `signals-6` drops the Python/TypeScript examples and the uninstall
-  cleanup commands from the README; restore any you want back.
-- CI (`.github/workflows/ci.yml`) has not run on GitHub: it only runs once
-  applied upstream. The pty test needs util-linux `script` and skips
-  elsewhere.
-- Nothing here was run against Cloudflare or a real Signal account.
+- Contract changes to accept or revert: no token secret now returns 500
+  instead of relaying (`-3`); bodies over 64 KiB get 413 (`-3`); under
+  `curl | bash` the installer prompts read `/dev/tty` (`-5`).
+- Node 22 is the floor (`engines`), because wrangler 4.158 needs it.
+- `-6` dropped the Python/TypeScript examples and the uninstall cleanup
+  commands from the README; restore any you want back.
+- CI has not run on GitHub (it only runs once applied upstream), and nothing
+  was run on macOS, against Cloudflare, or with a real Signal account.
