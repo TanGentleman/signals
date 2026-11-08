@@ -70,7 +70,7 @@ in the CLI (candidates for a later cut, now that the CLI has tests in -4).
 ## Applying a branch upstream
 
 ```bash
-git clone https://github.com/TanGentleman/kranti-sandbox && cd kranti-sandbox
+git clone https://github.com/TanGentleman/kranti-sandbox && cd kranti-sandbox   # private: needs access
 base=$(git log -1 --format=%H --grep='^Import signals upstream' origin/signals-1)
 git format-patch --relative=signals "$base"..origin/signals-7 -o /tmp/signals-7
 cd .. && git clone https://github.com/TanGentleman/signals && cd signals
