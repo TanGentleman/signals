@@ -66,17 +66,11 @@ signals setup               # first-time: docker, tunnel, worker, e2e test
 signals setup --no-deploy   # first-time: docker + tunnel only (no worker deploy)
 signals up                  # start tunnel + docker (redeploys token if SIGNAL_WEBHOOK_TOKEN is set in .env)
 signals up <token>          # start + redeploy worker with provided token
-signals down                # stop tunnel
+signals down                # stop tunnel + docker container
 signals uninstall           # remove tunnel, worker, docker container
-
-# or, from inside the repo:
-./signals setup             # first-time: docker, tunnel, worker, e2e test
-./signals setup --no-deploy # first-time: docker + tunnel only (no worker deploy)
-./signals up                # start tunnel + docker (redeploys token if SIGNAL_WEBHOOK_TOKEN is set in .env)
-./signals up <token>        # start + redeploy worker with provided token
-./signals down              # stop tunnel
-./signals uninstall         # remove tunnel, worker, docker container
 ```
+
+From a checkout, run the same commands as `./signals <command>`.
 
 Token behavior:
 - `setup` deploys worker auth unless you pass `--no-deploy`.
@@ -172,6 +166,9 @@ rm -rf ~/.cloudflared
 ## Local dev
 
 ```bash
-cp .dev.vars.example .dev.vars   # fill in values
-npx wrangler dev                 # → http://localhost:8787/notify
+npm ci
+cp .dev.vars.example .dev.vars           # fill in values
+cp wrangler.toml.example wrangler.toml   # or ./signals init
+npx wrangler dev                         # → http://localhost:8787/notify
+npm run type-check
 ```

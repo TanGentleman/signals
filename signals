@@ -439,7 +439,7 @@ Usage:
   ./signals setup --no-deploy First-time setup only (no worker deploy)
   ./signals up                Start tunnel + docker
   ./signals up <token>        Start + redeploy worker with token
-  ./signals down              Stop docker container
+  ./signals down              Stop tunnel + docker container
   ./signals uninstall         Remove tunnel/worker/container/config
 EOF
 }
