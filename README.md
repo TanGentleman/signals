@@ -73,13 +73,15 @@ signals setup               # docker, QR link, tunnel, worker, test message
 signals setup --no-deploy   # docker and tunnel only
 signals up [token]          # start tunnel and docker; redeploy the token if given or set in .env
 signals down                # stop tunnel and docker
-signals uninstall           # remove the tunnel, DNS route, worker, container and ~/.cloudflared/config.yml
+signals uninstall           # remove the tunnel, worker, container and ~/.cloudflared/config.yml
 ```
 
 From a checkout, use `./signals`. Set `SIGNAL_WEBHOOK_TOKEN` in `.env` to keep
 the same token across `setup` runs; otherwise `setup` makes a random one.
 `uninstall` keeps the linked-device data in `~/.local/share/signal-cli`, the
-rest of `~/.cloudflared`, the checkout and the launcher.
+rest of `~/.cloudflared`, the checkout and the launcher. It does not delete
+the `signal-bridge` DNS record (cloudflared has no command for that); remove it
+in the Cloudflare dashboard.
 
 If messages stop arriving: `docker start signal-bridge`, or re-link at
 `http://localhost:8080/v1/qrcodelink?device_name=mac`.

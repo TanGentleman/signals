@@ -80,7 +80,7 @@ export default {
       });
     }
 
-    let body: Record<string, unknown>;
+    let body: { message?: unknown } | null;
     try {
       body = JSON.parse(text);
     } catch {
@@ -91,7 +91,7 @@ export default {
     }
 
     const message =
-      typeof body.message === "string" ? body.message : "Agent notification";
+      typeof body?.message === "string" ? body.message : "Agent notification";
 
     // Forward to signal-cli-rest-api via named tunnel
     let signalResponse: Response;

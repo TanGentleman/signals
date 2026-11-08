@@ -144,6 +144,16 @@ describe("relay", () => {
     expect(JSON.parse(String(upstream[0].init.body)).message).toBe("Backup finished");
   });
 
+  it("uses the default message for a JSON body that is not an object", async ({ expect }) => {
+    for (const body of ["null", "5", '"hi"', "[]"]) {
+      const response = await notify(body);
+      expect(response.status).toBe(200);
+    }
+    expect(upstream.map((r) => JSON.parse(String(r.init.body)).message)).toEqual(
+      Array(4).fill("Agent notification"),
+    );
+  });
+
   it("rejects invalid JSON", async ({ expect }) => {
     const response = await notify("not json");
     expect(response.status).toBe(400);

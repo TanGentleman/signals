@@ -57,6 +57,9 @@ in the CLI (candidates for a later cut, now that the CLI has tests in -4).
   one install block, a status-code table, cuts the Python/TS examples and
   the long uninstall/cleanup section. Adds a test for the README curl
   example (no JSON content type), 16 worker tests.
+  Review fixes on `-6`: a JSON body that is not an object (`null`) threw
+  in the worker; it now gets the default message (17 worker tests). The
+  README no longer says `uninstall` removes the DNS record (it never did).
 
 ## Applying a branch upstream
 
