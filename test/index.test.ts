@@ -138,6 +138,40 @@ describe("relay", () => {
     expect(upstream).toHaveLength(0);
   });
 
+  it("accepts a body at the 64 KiB limit", async ({ expect }) => {
+    const padding = "a".repeat(64 * 1024 - '{"message":""}'.length);
+    const response = await notify(JSON.stringify({ message: padding }));
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveLength(1);
+  });
+
+  it("rejects a body over 64 KiB", async ({ expect }) => {
+    const padding = "a".repeat(64 * 1024);
+    const response = await notify(JSON.stringify({ message: padding }));
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "Payload Too Large" });
+    expect(upstream).toHaveLength(0);
+  });
+
+  it("rejects a streamed body over 64 KiB with no Content-Length", async ({ expect }) => {
+    const chunk = new TextEncoder().encode("a".repeat(16 * 1024));
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < 5; i++) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    const request = new Request("https://signal-agent.example.com/notify", {
+      method: "POST",
+      headers: { "X-Webhook-Token": "test-token" },
+      body,
+    });
+    expect(request.headers.get("Content-Length")).toBeNull();
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(413);
+    expect(upstream).toHaveLength(0);
+  });
+
   it("surfaces an upstream error as 502", async ({ expect }) => {
     respond = () =>
       Response.json({ error: "Couldn't process request" }, { status: 400 });

@@ -44,8 +44,8 @@ in the CLI (candidates for a later cut once the CLI has tests).
 - `signals-2` (done): 11 worker tests in workerd (vitest 5 +
   `@cloudflare/vitest-plugin`) with a fake signal-cli-rest-api; `npm test`
   in CI.
-- `signals-3` (planned): worker hardening: constant-time token compare,
-  fail closed without a token, request size limit.
+- `signals-3` (done): worker hardening: constant-time token compare,
+  fail closed (500) without a token, 64 KiB request limit (413). 15 tests.
 - `signals-4` (planned): offline CLI and installer tests with fake
   docker/cloudflared/npx.
 - `signals-5` (planned): installer reads prompts from `/dev/tty` so the
@@ -73,4 +73,6 @@ needed.
 - `@cloudflare/workers-types` went 4 -> 5 (4.x stopped in July 2026).
   Type-check passes; nothing else in the repo uses it.
 - Node 22 is now required (`engines`), because wrangler 4.158 needs it.
+- `signals-3` changes the worker contract: no token secret now means 500
+  instead of an open relay, and bodies over 64 KiB get 413.
 - Nothing here was run against Cloudflare or a real Signal account.

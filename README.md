@@ -131,6 +131,8 @@ await fetch("https://signal-agent.yourdomain.com/notify", {
 |---|---|
 | Worker returns 502 | Is tunnel running? `./signals up` |
 | 401 Unauthorized | Token mismatch — check `X-Webhook-Token` header |
+| 500 `SIGNAL_WEBHOOK_TOKEN is not set` | Worker has no token secret — `./signals up <token>` |
+| 413 Payload Too Large | Request body is over 64 KiB |
 | Message not received | Wrong phone number format — must be E.164 (`+1...`) |
 | Docker container stopped | `docker start signal-bridge` |
 | Device unlinked | Re-link at `http://localhost:8080/v1/qrcodelink?device_name=mac` |
