@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run type-check
+      - run: shellcheck signals install.sh
+      - name: wrangler deploy --dry-run
+        run: |
+          cp wrangler.toml.example wrangler.toml
+          npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/dist"
