@@ -4,7 +4,7 @@ set -eu
 INSTALL_DIR="${SIGNALS_INSTALL_DIR:-$HOME/.signals}"
 BIN_DIR="${HOME}/.local/bin"
 BIN_PATH="${BIN_DIR}/signals"
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
 LOCAL_SIGNALS="${SCRIPT_DIR}/signals"
 REPO_URL="${SIGNALS_REPO_URL:-https://github.com/TanGentleman/signals.git}"
 
@@ -24,10 +24,17 @@ require_cmd() {
   done
 }
 
+# Under curl ... | bash, stdin is the script itself, so prompts read the
+# terminal instead when there is one.
+PROMPT_INPUT=/dev/stdin
+if [ ! -t 0 ] && (: </dev/tty) 2>/dev/null; then
+  PROMPT_INPUT=/dev/tty
+fi
+
 confirm() {
   answer=""
   printf '%s' "$1 [Y/n] "
-  read -r answer
+  read -r answer <"$PROMPT_INPUT"
   case "$answer" in
     ""|y|Y) return 0 ;;
     *) return 1 ;;
@@ -76,10 +83,10 @@ esac
 
 log ""
 log "Let's configure your local files (.env and wrangler.toml)."
-"$TARGET_SIGNALS" init
+"$TARGET_SIGNALS" init <"$PROMPT_INPUT"
 
 if [ -n "${DOMAIN:-}" ] || confirm "Run full setup now?"; then
-  "$TARGET_SIGNALS" setup
+  "$TARGET_SIGNALS" setup <"$PROMPT_INPUT"
 else
   log ""
   log "Next steps:"

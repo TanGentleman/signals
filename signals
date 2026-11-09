@@ -5,9 +5,9 @@ readonly APP_NAME="signals"
 readonly CONTAINER_NAME="signal-bridge"
 readonly TUNNEL_NAME="signal-bridge"
 readonly WORKER_NAME="signal-agent"
-readonly PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_DIR
 readonly ENV_FILE="$PROJECT_DIR/.env"
-readonly ENV_EXAMPLE_FILE="$PROJECT_DIR/.env.example"
 readonly WRANGLER_CONFIG="wrangler.toml"
 readonly WRANGLER_CONFIG_EXAMPLE="wrangler.toml.example"
 readonly LOCAL_API="http://localhost:8080"
@@ -72,8 +72,8 @@ decode_b64_to_file() {
 wait_for_url() {
   local url="$1"
   local max_seconds="$2"
-  local i
-  for i in $(seq 1 "$max_seconds"); do
+  local _
+  for _ in $(seq 1 "$max_seconds"); do
     if curl -sf "$url" >/dev/null 2>&1; then
       return 0
     fi
@@ -105,7 +105,7 @@ require_env() {
 
 load_env() {
   [[ -f "$ENV_FILE" ]] || die "No .env found. Run './signals init' first."
-  # shellcheck disable=SC1091
+  # shellcheck source=/dev/null
   source "$ENV_FILE"
   require_env DOMAIN
   require_env SIGNAL_ACCOUNT
@@ -425,7 +425,7 @@ e2e_test() {
     fi
   done
 
-  body="$(<"$output_file" 2>/dev/null || true)"
+  body="$(cat "$output_file" 2>/dev/null || true)"
   die "E2E failed after $max_attempts attempts (HTTP ${http:-unknown}): $body"
 }
 
@@ -439,7 +439,7 @@ Usage:
   ./signals setup --no-deploy First-time setup only (no worker deploy)
   ./signals up                Start tunnel + docker
   ./signals up <token>        Start + redeploy worker with token
-  ./signals down              Stop docker container
+  ./signals down              Stop tunnel + docker container
   ./signals uninstall         Remove tunnel/worker/container/config
 EOF
 }
@@ -637,9 +637,11 @@ cmd_up() {
 cmd_down() {
   log "Stopping signals..."
   stop_tunnel_processes
-  docker stop "$CONTAINER_NAME" >/dev/null 2>&1 \
-    && log "Docker container stopped" \
-    || log "Container not running"
+  if docker stop "$CONTAINER_NAME" >/dev/null 2>&1; then
+    log "Docker container stopped"
+  else
+    log "Container not running"
+  fi
   log "Tunnel process stopped (if running)"
 }
 
@@ -650,7 +652,7 @@ cmd_uninstall() {
 
   cat <<EOF
 This will remove:
-  - Cloudflare tunnel '${TUNNEL_NAME}' and its DNS route
+  - Cloudflare tunnel '${TUNNEL_NAME}' (its DNS record stays; delete it in the Cloudflare dashboard)
   - Docker container '${CONTAINER_NAME}'
   - $CF_CONFIG
   - Cloudflare Worker '${WORKER_NAME}'

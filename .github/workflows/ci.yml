@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        node: [22.23.4, 26.13.0]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run type-check
+      - run: npm test
+      - run: shellcheck signals install.sh test/cli.sh test/fakes/fake
+      - run: npm run test:cli
+      - name: wrangler deploy --dry-run
+        run: |
+          cp wrangler.toml.example wrangler.toml
+          npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/dist"
